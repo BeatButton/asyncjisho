@@ -6,7 +6,7 @@ with open('requirements.txt') as file:
 setup(name='asyncjisho',
       author='BeatButton',
       url='https://github.com/BeatButton/asyncjiho',
-      version='0.1.0',
+      version='0.1.1',
       packages=find_packages(),
       license='MIT',
       description='An async wrapper for the Jisho.org API',

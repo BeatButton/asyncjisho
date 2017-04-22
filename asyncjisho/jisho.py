@@ -45,7 +45,7 @@ class Jisho:
                 senses['parts_of_speech'].extend(sense['parts_of_speech'])
 
             try:
-                senses['parts_of_speech'].remove('Wikipedia defintition')
+                senses['parts_of_speech'].remove('Wikipedia definition')
             except ValueError:
                 pass
 
