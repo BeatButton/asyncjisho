@@ -45,12 +45,23 @@ class JishoBase:
 class Jisho(JishoBase):
     """The class that makes the API requests. A class is necessary to safely
     handle the aiohttp ClientSession."""
-    def __init__(self):
-        self.loop = asyncio.get_event_loop()
-        self.session = aiohttp.ClientSession(loop=self.loop)
+    def __init__(self, *, loop=None, session=None):
+        if loop is not None and session is not None:
+            raise ValueError('Cannot specify both loop and session')
+        if loop is None:
+            self.loop = asyncio.get_event_loop()
+        else:
+            self.loop = loop
+        if session is None:
+            self.session = aiohttp.ClientSession(loop=self.loop)
+            self._close = True
+        else:
+            self.session = session
+            self._close = False
 
     def __del__(self):
-        self.session.close()
+        if self._close:
+            self.session.close()
 
     async def lookup(self, keyword, **kwargs):
         """Search Jisho.org for a word. Returns a list of dicts with keys
