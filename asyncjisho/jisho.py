@@ -27,8 +27,8 @@ class JishoBase:
             senses = {'english': [], 'parts_of_speech': []}
 
             for sense in data['senses']:
-                senses['english'].extend(sense['english_definitions'])
-                senses['parts_of_speech'].extend(sense['parts_of_speech'])
+                senses['english'].extend(sense.get('english_definitions', ()))
+                senses['parts_of_speech'].extend(sense.get('parts_of_speech', ()))
 
             try:
                 senses['parts_of_speech'].remove('Wikipedia definition')
