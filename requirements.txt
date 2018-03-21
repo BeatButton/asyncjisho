@@ -1,2 +1,1 @@
-aiohttp
-requests
+aiohttp >=3.0,<4.0

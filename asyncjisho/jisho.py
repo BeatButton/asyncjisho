@@ -1,30 +1,61 @@
 import asyncio
+from typing import Dict, List, Set, TypeVar, Union
 
 import aiohttp
-import requests
 
+__all__ = ['Jisho']
 
-class JishoBase:
-    """Base class for JishoAPI parsing"""
-    api_url = 'http://jisho.org/api/v1/search/words'
+# this is to avoid terrible long type hints
+# sorry about the not super great readability
+T = TypeVar('T')
+V = Union[str, List[str]]
+LDS = List[Dict[str, T]]  # LDS = List, Dict, String
 
-    def _parse(self, response):
+class Jisho:
+    """The class that makes the API requests. A class is necessary to safely
+    handle the aiohttp ClientSession."""
+    api_url = 'https://jisho.org/api/v1/search/words'
+    def __init__(self, *, loop: asyncio.AbstractEventLoop = None, session: aiohttp.ClientSession = None) -> None:
+        if loop is not None and session is not None:
+            raise ValueError('Cannot specify both loop and session')
+        elif loop is None:
+            self._loop = asyncio.get_event_loop()
+        else:
+            self._loop = loop
+        if session is None:
+            self._session = aiohttp.ClientSession(loop=self._loop)
+            self._close = True
+        else:
+            self._session = session
+            self._close = False
+
+    def __del__(self) -> None:
+        # we should always close the session beforehand,
+        # but just in case someone doesn't, we'll try
+        if self._close:
+            try:
+                self._loop.create_task(self._session.close())
+            except RuntimeError:
+                # loop is closed
+                pass
+
+    def _parse(self, response: LDS[LDS[V]]) -> LDS[List[str]]:
         results = []
 
         for data in response:
-            readings = []
-            words = []
+            readings: Set[str] = set()
+            words: Set[str] = set()
 
             for kanji in data['japanese']:
-                reading = kanji.get('reading')
+                reading: str = kanji.get('reading')
                 if reading and reading not in readings:
-                    readings.append(reading)
+                    readings.add(reading)
 
-                word = kanji.get('word')
+                word: str = kanji.get('word')
                 if word and word not in words:
-                    words.append(kanji['word'])
+                    words.add(word)
 
-            senses = {'english': [], 'parts_of_speech': []}
+            senses: Dict[str, List[str]] = {'english': [], 'parts_of_speech': []}
 
             for sense in data['senses']:
                 senses['english'].extend(sense.get('english_definitions', ()))
@@ -35,59 +66,29 @@ class JishoBase:
             except ValueError:
                 pass
 
-            result = {'readings': readings, 'words': words}
-            result.update(senses)
+            result = {'readings': list(readings), 'words': list(words), **senses}
             results.append(result)
 
         return results
 
-
-class Jisho(JishoBase):
-    """The class that makes the API requests. A class is necessary to safely
-    handle the aiohttp ClientSession."""
-    def __init__(self, *, loop=None, session=None):
-        if loop is not None and session is not None:
-            raise ValueError('Cannot specify both loop and session')
-        if loop is None:
-            self.loop = asyncio.get_event_loop()
-        else:
-            self.loop = loop
-        if session is None:
-            self.session = aiohttp.ClientSession(loop=self.loop)
-            self._close = True
-        else:
-            self.session = session
-            self._close = False
-
-    def __del__(self):
-        if self._close:
-            self.session.close()
-
-    async def lookup(self, keyword, **kwargs):
+    async def lookup(self, keyword: str, **kwargs) -> LDS[List[str]]:
         """Search Jisho.org for a word. Returns a list of dicts with keys
         readings, words, english, parts_of_speech."""
-        params = {'keyword': keyword}
-        params.update(kwargs)
-        async with self.session.get(self.api_url, params=params) as resp:
+        params = {'keyword': keyword, **kwargs}
+        async with self._session.get(self.api_url, params=params) as resp:
             response = (await resp.json())['data']
-
         return self._parse(response)
 
+    async def close(self):
+        """Closes the internal ClientSession.
+        Only use this if you do not plan to reuse the session,
+        such as when you do not specify one in the constructor."""
+        await self._session.close()
+        self._close = False
 
-class SyncJisho(JishoBase):
-    """A synchronous version of Jisho, using the requests module."""
-    def __init__(self):
-        self.session = requests.Session()
+    async def __aenter__(self):
+        return self
 
-    def __del__(self):
-        self.session.close()
-
-    def lookup(self, keyword, **kwargs):
-        """Search Jisho.org for a word. Returns a list of dicts with keys
-        readings, words, english, parts_of_speech."""
-        params = {'keyword': keyword}
-        params.update(kwargs)
-        resp = self.session.get(self.api_url, params=params)
-        response = resp.json()['data']
-
-        return self._parse(response)
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._close:
+            await self._session.close()
